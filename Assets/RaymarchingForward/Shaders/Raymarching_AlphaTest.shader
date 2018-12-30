@@ -23,7 +23,6 @@ Pass
 {
     Tags { "LightMode" = "ForwardBase" }
     ZWrite On
-    //Blend SrcAlpha OneMinusSrcAlpha
     CGPROGRAM
     #include "Raymarching.cginc"
     #pragma vertex vert
