@@ -27,7 +27,7 @@ Pass
     CGPROGRAM
     #include "Raymarching.cginc"
     #pragma vertex vert
-    #pragma fragment frag
+    #pragma fragment fragColor
     #pragma multi_compile_fog
     #pragma multi_compile_instancing
     ENDCG

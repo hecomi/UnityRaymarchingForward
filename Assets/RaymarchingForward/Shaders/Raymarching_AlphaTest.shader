@@ -15,7 +15,6 @@ Tags
 { 
     "Queue" = "AlphaTest" 
     "RenderType" = "Opaque"
-    "IgnoreProjector" = "True"
     "DisableBatching" = "True"
 }
 
@@ -26,7 +25,7 @@ Pass
     CGPROGRAM
     #include "Raymarching.cginc"
     #pragma vertex vert
-    #pragma fragment frag
+    #pragma fragment fragColorDepth
     #pragma multi_compile_fog
     #pragma multi_compile_instancing
     ENDCG

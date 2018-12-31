@@ -10,24 +10,9 @@ inline float smoothMin(float d1, float d2, float k)
     return -log(h) / k;
 }
 
-inline float3 mod(float3 a, float3 b)
-{
-    return frac(abs(a / b)) * abs(b);
-}
-
-inline float3 repeat(float3 pos, float3 span)
-{
-    return mod(pos, span) - span * 0.5;
-}
-
 inline float sphere(float3 pos, float radius)
 {
     return length(pos) - radius;
-}
-
-inline float roundBox(float3 pos, float3 size, float round)
-{
-    return length(max(abs(pos) - size * 0.5, 0.0)) - round;
 }
 
 inline float3 ToLocal(float3 pos)
@@ -55,9 +40,6 @@ inline float3 GetCameraForward()
 
 inline float _DistanceFunction(float3 pos)
 {
-    pos = repeat(pos, 0.3);
-    return roundBox(pos, 0.1, 0.01);
-    //return sphere(pos, 0.5);
     return smoothMin(
         sphere(pos - float3(0.2, 0.2, 0.2), 0.28),
         sphere(pos - float3(-0.2, -0.2, -0.2), 0.28),
@@ -67,7 +49,6 @@ inline float _DistanceFunction(float3 pos)
 inline float DistanceFunction(float3 pos)
 {
     return _DistanceFunction(ToLocal(pos) * GetWorldScale());
-    //return _DistanceFunction(ToLocal(pos));
 }
 
 inline float3 GetNormal(float3 pos)
@@ -77,6 +58,22 @@ inline float3 GetNormal(float3 pos)
         DistanceFunction(pos + float3(  d, 0.0, 0.0)) - DistanceFunction(pos + float3( -d, 0.0, 0.0)),
         DistanceFunction(pos + float3(0.0,   d, 0.0)) - DistanceFunction(pos + float3(0.0,  -d, 0.0)),
         DistanceFunction(pos + float3(0.0, 0.0,   d)) - DistanceFunction(pos + float3(0.0, 0.0,  -d))));
+}
+
+inline float EncodeDepth(float4 pos)
+{
+    float z = pos.z / pos.w;
+#if defined(SHADER_API_GLCORE) || defined(SHADER_API_OPENGL) || defined(SHADER_API_GLES) || defined(SHADER_API_GLES3)
+    return z * 0.5 + 0.5;
+#else 
+    return z;
+#endif 
+}
+
+inline float GetCameraDepth(float3 pos)
+{
+    float4 vpPos = mul(UNITY_MATRIX_VP, float4(pos, 1.0));
+    return EncodeDepth(vpPos);
 }
 
 struct appdata
@@ -120,17 +117,13 @@ float4 _Color;
 int _Loop;
 float _MinDist;
 
-float4 frag(v2f i) : SV_Target
+inline void raymarch(inout float3 pos, float4 uv)
 {
-    UNITY_SETUP_INSTANCE_ID(i);
-    UNITY_SETUP_STEREO_EYE_INDEX_POST_VERTEX(i);
-
-    float3 pos = i.worldPos;
     float3 to = pos - _WorldSpaceCameraPos;
     float len = length(to);
     float3 dir = normalize(to);
-    float depth = LinearEyeDepth(SAMPLE_DEPTH_TEXTURE_PROJ(_CameraDepthTexture, UNITY_PROJ_COORD(i.projPos)));
-    float maxLen = depth / dot(dir, GetCameraForward());
+    float eyeDepth = LinearEyeDepth(SAMPLE_DEPTH_TEXTURE_PROJ(_CameraDepthTexture, uv));
+    float maxLen = eyeDepth / dot(dir, GetCameraForward());
     float dist = 0.0;
 
     for (int n = 0; n < _Loop; ++n) 
@@ -143,15 +136,39 @@ float4 frag(v2f i) : SV_Target
     }
 
     if (dist > _MinDist || len > maxLen) discard;
+}
 
+float4 fragColor(v2f i) : SV_Target
+{
+    UNITY_SETUP_INSTANCE_ID(i);
+    UNITY_SETUP_STEREO_EYE_INDEX_POST_VERTEX(i);
+
+    float3 pos = i.worldPos; 
+    raymarch(pos, UNITY_PROJ_COORD(i.projPos));
     float3 normal = GetNormal(pos);
 
-    float4 col;
-    col.rgb = max(dot(normal, _WorldSpaceLightPos0.xyz), 0.0) * _Color.rgb;
-    col.a = _Color.a;
-    UNITY_APPLY_FOG(i.fogCoord, col);
+    float4 color;
+    color.rgb = max(dot(normal, _WorldSpaceLightPos0.xyz), 0.0) * _Color.rgb;
+    color.a = _Color.a;
+    UNITY_APPLY_FOG(i.fogCoord, color);
 
-    return col;
+    return color;
+}
+
+void fragColorDepth(v2f i, out float4 color : SV_Target, out float depth : SV_Depth)
+{
+    UNITY_SETUP_INSTANCE_ID(i);
+    UNITY_SETUP_STEREO_EYE_INDEX_POST_VERTEX(i);
+
+    float3 pos = i.worldPos; 
+    raymarch(pos, UNITY_PROJ_COORD(i.projPos));
+    float3 normal = GetNormal(pos);
+
+    color.rgb = max(dot(normal, _WorldSpaceLightPos0.xyz), 0.0) * _Color.rgb;
+    color.a = _Color.a;
+    UNITY_APPLY_FOG(i.fogCoord, color);
+
+    depth = GetCameraDepth(pos);
 }
 
 #endif
